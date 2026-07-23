@@ -15,7 +15,8 @@ No cloud, no accounts. Everything lives in the app's sandbox.
 
 - Browser upload page (drag & drop, folders, multi-file, parallel uploads)
   with a full library manager: folders, rename, move, delete, search, sort
-- Chunked upload protocol (1 MiB chunks, resumable-per-file, sequential)
+- Chunked upload protocol (1 MiB chunks, sequential, per-chunk retry —
+  in-progress uploads don't survive a server restart)
 - Library with generated thumbnails, watch-progress pie badges, `[new]`
   badges, swipe-to-delete, multi-select
 - Player: media_kit (libmpv) — mp4/mov/m4v/webm/mkv
@@ -32,7 +33,7 @@ No cloud, no accounts. Everything lives in the app's sandbox.
 
 ```bash
 flutter pub get
-flutter test                      # 47 unit/integration tests
+flutter test                      # 59 unit/integration tests
 flutter run -d <device>
 ```
 

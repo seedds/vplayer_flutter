@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vplayer/models/upload_activity.dart';
 import 'package:vplayer/services/playback_state_store.dart';
 import 'package:vplayer/services/thumbnail_service.dart';
 import 'package:vplayer/services/upload_server.dart';
@@ -32,7 +33,8 @@ Future<Map<String, Object?>> _getJson(
 }
 
 Future<Map<String, Object?>> _postChunk(HttpClient client, int port,
-    Map<String, String> headers, List<int> bytes) async {
+    Map<String, String> headers, List<int> bytes,
+    {String fieldName = 'file'}) async {
   const boundary = 'testboundary123';
   final request =
       await client.postUrl(Uri.parse('http://127.0.0.1:$port/upload/chunk'));
@@ -42,7 +44,7 @@ Future<Map<String, Object?>> _postChunk(HttpClient client, int port,
 
   request.write('--$boundary\r\n');
   request.write(
-      'Content-Disposition: form-data; name="file"; filename="chunk.bin"\r\n');
+      'Content-Disposition: form-data; name="$fieldName"; filename="chunk.bin"\r\n');
   request.write('Content-Type: application/octet-stream\r\n\r\n');
   request.add(bytes);
   request.write('\r\n--$boundary--\r\n');
@@ -174,6 +176,95 @@ void main() {
     expect(await saved.length(), payload.length);
   });
 
+  test('rejects a chunk that changes the declared chunk count', () async {
+    final payload = List<int>.generate(3000, (i) => i % 256);
+    final init = await _postJson(client, port, '/upload/init', {
+      'fileName': 'shifty.mp4',
+      'totalSize': payload.length,
+    });
+    final uploadId = init['uploadId'] as String;
+
+    await _postChunk(
+        client,
+        port,
+        {
+          'x-upload-id': uploadId,
+          'x-total-chunks': '2',
+          'x-total-size': '${payload.length}',
+          'x-chunk-index': '0',
+        },
+        payload.sublist(0, 2000));
+
+    // Second chunk claims a different total-chunks count than the session
+    // was pinned to on the first chunk.
+    expect(
+      () => _postChunk(
+          client,
+          port,
+          {
+            'x-upload-id': uploadId,
+            'x-total-chunks': '3',
+            'x-total-size': '${payload.length}',
+            'x-chunk-index': '1',
+          },
+          payload.sublist(2000)),
+      throwsException,
+    );
+  });
+
+  test('rejects a chunk larger than the 1 MiB ceiling', () async {
+    const oversized = 1024 * 1024 + 1;
+    final payload = List<int>.generate(oversized, (i) => i % 256);
+    final init = await _postJson(client, port, '/upload/init', {
+      'fileName': 'toobig.mp4',
+      'totalSize': payload.length,
+    });
+    final uploadId = init['uploadId'] as String;
+
+    // A single POST carrying the whole file in one part must be rejected even
+    // though its cumulative size equals totalSize.
+    expect(
+      () => _postChunk(
+          client,
+          port,
+          {
+            'x-upload-id': uploadId,
+            'x-total-chunks': '1',
+            'x-total-size': '${payload.length}',
+            'x-chunk-index': '0',
+          },
+          payload),
+      throwsException,
+    );
+  });
+
+  test('ignores multipart parts not named "file"', () async {
+    final payload = List<int>.generate(500, (i) => i % 256);
+    final init = await _postJson(client, port, '/upload/init', {
+      'fileName': 'wrongfield.mp4',
+      'totalSize': payload.length,
+    });
+    final uploadId = init['uploadId'] as String;
+
+    // The part is named "other" instead of "file"; the server should find no
+    // file bytes (rather than blindly using the first part) and error — while
+    // still fully draining the body.
+    expect(
+      () => _postChunk(
+          client,
+          port,
+          {
+            'x-upload-id': uploadId,
+            'x-total-chunks': '1',
+            'x-total-size': '${payload.length}',
+            'x-chunk-index': '0',
+          },
+          payload,
+          fieldName: 'other'),
+      throwsException,
+    );
+  });
+
   test('complete rejects incomplete uploads', () async {
     final init = await _postJson(client, port, '/upload/init', {
       'fileName': 'a.mp4',
@@ -190,6 +281,21 @@ void main() {
     final result = await _postJson(
         client, port, '/upload/cancel', {'uploadId': 'nonexistent'});
     expect(result['ok'], true);
+  });
+
+  test('cancelling an active upload reports a cancelled status', () async {
+    UploadStatus? lastStatus;
+    server.onActivity = (activity) => lastStatus = activity.status;
+
+    final init = await _postJson(client, port, '/upload/init', {
+      'fileName': 'abandoned.mp4',
+      'totalSize': 100,
+    });
+
+    await _postJson(
+        client, port, '/upload/cancel', {'uploadId': init['uploadId']});
+
+    expect(lastStatus, UploadStatus.cancelled);
   });
 
   test('library endpoints: folder, list, rename, move, delete', () async {

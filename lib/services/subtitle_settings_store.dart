@@ -1,55 +1,31 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
+import 'clamped_int_setting_store.dart';
 
 const minSubtitleFontSize = 24;
 const maxSubtitleFontSize = 48;
 const defaultSubtitleFontSize = 36;
 
-int clampSubtitleFontSize(Object? input) {
-  if (input is! num || !input.isFinite) return defaultSubtitleFontSize;
-  return input.round().clamp(minSubtitleFontSize, maxSubtitleFontSize);
-}
+int clampSubtitleFontSize(Object? input) => ClampedIntSettingStore.clampValue(
+      input,
+      min: minSubtitleFontSize,
+      max: maxSubtitleFontSize,
+      fallback: defaultSubtitleFontSize,
+    );
 
 /// Persists subtitle settings in `<documents>/subtitle-settings.json`.
 class SubtitleSettingsStore {
-  SubtitleSettingsStore(this.documentsPath);
+  SubtitleSettingsStore(String documentsPath)
+      : _store = ClampedIntSettingStore(
+          documentsPath: documentsPath,
+          fileName: 'subtitle-settings.json',
+          jsonKey: 'subtitleFontSize',
+          min: minSubtitleFontSize,
+          max: maxSubtitleFontSize,
+          defaultValue: defaultSubtitleFontSize,
+        );
 
-  final String documentsPath;
+  final ClampedIntSettingStore _store;
 
-  int? _cache;
-  Future<void> _mutationQueue = Future.value();
+  Future<int> getSubtitleFontSize() => _store.read();
 
-  String get _filePath => p.join(documentsPath, 'subtitle-settings.json');
-
-  Future<int> getSubtitleFontSize() async {
-    final cached = _cache;
-    if (cached != null) return cached;
-
-    final file = File(_filePath);
-    if (!await file.exists()) {
-      return _cache = defaultSubtitleFontSize;
-    }
-    try {
-      final parsed = jsonDecode(await file.readAsString());
-      final value =
-          parsed is Map<String, Object?> ? parsed['subtitleFontSize'] : null;
-      return _cache = clampSubtitleFontSize(value);
-    } catch (_) {
-      return _cache = defaultSubtitleFontSize;
-    }
-  }
-
-  Future<int> saveSubtitleFontSize(int value) async {
-    final clamped = clampSubtitleFontSize(value);
-    final next = _mutationQueue.catchError((_) {}).then((_) async {
-      _cache = clamped;
-      await File(_filePath)
-          .writeAsString(jsonEncode({'subtitleFontSize': clamped}));
-    });
-    _mutationQueue = next;
-    await next;
-    return clamped;
-  }
+  Future<int> saveSubtitleFontSize(int value) => _store.write(value);
 }

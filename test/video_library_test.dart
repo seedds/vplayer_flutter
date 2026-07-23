@@ -136,5 +136,22 @@ void main() {
       expect(videos.map((v) => v.relativePath).toSet(),
           {'f/inner.mp4', 'outer.mp4'});
     });
+
+    test('collectPlaybackArtifactVideos de-duplicates overlapping targets',
+        () async {
+      await Directory('${library.videoDirectory}/f').create();
+      await File('${library.videoDirectory}/f/inner.mp4').writeAsString('x');
+
+      final folder = (await library.listLibraryItems())
+          .firstWhere((i) => i.name == 'f');
+      final video = (await library.listLibraryItems('f'))
+          .firstWhere((i) => i.name == 'inner.mp4');
+
+      // Folder expands to inner.mp4, and the video is also passed directly:
+      // the shared collector should still yield exactly one entry.
+      final videos =
+          await library.collectPlaybackArtifactVideos([folder, video]);
+      expect(videos.map((v) => v.relativePath).toList(), ['f/inner.mp4']);
+    });
   });
 }

@@ -56,25 +56,12 @@ class LibraryScreen extends ConsumerWidget {
     );
   }
 
-  Future<List<LibraryItem>> _cleanupVideos(
-      WidgetRef ref, LibraryItem item) async {
-    final library = ref.read(videoLibraryProvider);
-    if (item.isFolder) {
-      return library.listAllVideoItems(item.relativePath);
-    }
-    return item.isVideo ? [item] : [];
-  }
-
   Future<void> _deleteItems(
       BuildContext context, WidgetRef ref, List<LibraryItem> targets) async {
     try {
-      final cleanupByPath = <String, LibraryItem>{};
-      for (final target in targets) {
-        for (final video in await _cleanupVideos(ref, target)) {
-          cleanupByPath[video.path] = video;
-        }
-      }
-      final cleanupVideos = cleanupByPath.values.toList();
+      final cleanupVideos = await ref
+          .read(videoLibraryProvider)
+          .collectPlaybackArtifactVideos(targets);
 
       if (cleanupVideos.isNotEmpty) {
         await ref
@@ -197,16 +184,12 @@ class LibraryScreen extends ConsumerWidget {
                       final targets = library.items
                           .where((i) => selection.selected.contains(i.path))
                           .toList();
-                      final cleanupByPath = <String, LibraryItem>{};
-                      for (final target in targets) {
-                        for (final video
-                            in await _cleanupVideos(ref, target)) {
-                          cleanupByPath[video.path] = video;
-                        }
-                      }
+                      final cleanupVideos = await ref
+                          .read(videoLibraryProvider)
+                          .collectPlaybackArtifactVideos(targets);
                       await ref
                           .read(playbackStateStoreProvider)
-                          .clearProgressFor(cleanupByPath.keys);
+                          .clearProgressFor(cleanupVideos.map((v) => v.path));
                       ref.read(selectionProvider.notifier).cancel();
                       await ref.read(libraryProvider.notifier).refresh();
                     },

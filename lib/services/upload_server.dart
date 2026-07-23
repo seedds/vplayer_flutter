@@ -36,6 +36,7 @@ class _UploadSession {
   final int totalSize;
   int receivedBytes = 0;
   int expectedChunkIndex = 0;
+  int? totalChunks;
 }
 
 class _HandlerError implements Exception {
@@ -313,7 +314,7 @@ class LocalUploadServer {
 
     final target = await library.createUploadTarget(relativePath);
     final uploadId =
-        '${DateTime.now().millisecondsSinceEpoch}-${_randomId()}';
+        '${DateTime.now().millisecondsSinceEpoch}-${VideoLibrary.randomToken()}';
 
     _uploads[uploadId] = _UploadSession(
       uploadId: uploadId,
@@ -334,15 +335,14 @@ class LocalUploadServer {
     });
   }
 
-  static String _randomId() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    var value = DateTime.now().microsecondsSinceEpoch;
-    final buffer = StringBuffer();
-    for (var i = 0; i < 6; i++) {
-      buffer.write(chars[value % chars.length]);
-      value = value ~/ chars.length + 7919 * (i + 1);
-    }
-    return buffer.toString();
+  /// Extracts the form field `name` from a part's `content-disposition`
+  /// header (e.g. `form-data; name="file"; filename="chunk.bin"` -> `file`).
+  static String? _partFieldName(Map<String, String> headers) {
+    final disposition = headers['content-disposition'];
+    if (disposition == null) return null;
+    final match =
+        RegExp(r'name="([^"]*)"|name=([^\s;]+)').firstMatch(disposition);
+    return match?.group(1) ?? match?.group(2);
   }
 
   Future<Response> _handleChunk(Request request) async {
@@ -363,10 +363,12 @@ class LocalUploadServer {
     final multipart = request.multipart();
     if (multipart != null) {
       await for (final part in multipart.parts) {
-        final bytes = await part
-            .fold<BytesBuilder>(BytesBuilder(), (b, d) => b..add(d))
-            .then((b) => b.takeBytes());
-        chunkBytes ??= bytes;
+        final bytes = await part.readBytes();
+        // Keep only the "file" field's bytes, but keep draining every part to
+        // the end (see gotcha above) rather than trusting part order.
+        if (chunkBytes == null && _partFieldName(part.headers) == 'file') {
+          chunkBytes = bytes;
+        }
       }
     } else {
       chunkBytes = await request
@@ -378,6 +380,15 @@ class LocalUploadServer {
     if (session == null) throw _HandlerError('Upload session not found.');
     if (session.totalSize != totalSize) {
       throw _HandlerError('Upload size mismatch.');
+    }
+    if (totalChunks <= 0) {
+      throw _HandlerError('Invalid chunk count.');
+    }
+    // Pin the chunk count to the session on first sighting; a client must not
+    // change how many chunks it claims part-way through an upload.
+    session.totalChunks ??= totalChunks;
+    if (session.totalChunks != totalChunks) {
+      throw _HandlerError('Upload chunk count mismatch.');
     }
     if (chunkIndex < 0 || chunkIndex >= totalChunks) {
       throw _HandlerError('Chunk index out of range.');
@@ -401,6 +412,9 @@ class LocalUploadServer {
 
     if (chunkBytes == null || chunkBytes.isEmpty) {
       throw _HandlerError('Uploaded chunk file missing.');
+    }
+    if (chunkBytes.length > chunkSize) {
+      throw _HandlerError('Chunk exceeds maximum chunk size.');
     }
     if (session.receivedBytes + chunkBytes.length > session.totalSize) {
       throw _HandlerError('Chunk exceeds declared upload size.');
@@ -461,7 +475,7 @@ class LocalUploadServer {
         final file = File(session.tempPath);
         if (await file.exists()) await file.delete();
       } catch (_) {}
-      _emitActivity(UploadStatus.error, 'Cancelled ${session.fileName}');
+      _emitActivity(UploadStatus.cancelled, 'Cancelled ${session.fileName}');
     }
 
     return _json({'ok': true});
@@ -495,13 +509,6 @@ class LocalUploadServer {
     return entryType;
   }
 
-  Future<List<LibraryItem>> _playbackArtifactVideos(LibraryItem target) async {
-    if (target.isFolder) {
-      return library.listAllVideoItems(target.relativePath);
-    }
-    return target.isVideo ? [target] : [];
-  }
-
   Future<void> _cleanupPlaybackArtifacts(List<LibraryItem> videos) async {
     if (videos.isEmpty) return;
     await playbackStore.clearProgressFor(videos.map((v) => v.path));
@@ -522,7 +529,8 @@ class LocalUploadServer {
     final target = await library.getLibraryItem(relativePath, entryType);
     if (target == null) throw _HandlerError('Library item not found.');
 
-    await _cleanupPlaybackArtifacts(await _playbackArtifactVideos(target));
+    await _cleanupPlaybackArtifacts(
+        await library.playbackArtifactVideosFor(target));
     await library.deleteLibraryItem(target.path);
 
     _emitActivity(UploadStatus.idle, 'Deleted ${target.name}');
@@ -545,7 +553,7 @@ class LocalUploadServer {
     final target = await library.getLibraryItem(relativePath, entryType);
     if (target == null) throw _HandlerError('Library item not found.');
 
-    final videosToCleanup = await _playbackArtifactVideos(target);
+    final videosToCleanup = await library.playbackArtifactVideosFor(target);
     final renamed =
         await library.renameLibraryItem(target.relativePath, entryType, name);
 
@@ -588,7 +596,7 @@ class LocalUploadServer {
       final target = await library.getLibraryItem(relativePath, entryType);
       if (target == null) throw _HandlerError('Library item not found.');
 
-      final videosToCleanup = await _playbackArtifactVideos(target);
+      final videosToCleanup = await library.playbackArtifactVideosFor(target);
       final moved = await library.moveLibraryItem(target.relativePath,
           entryType, destinationPath.isEmpty ? null : destinationPath);
 

@@ -1,55 +1,31 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
+import 'clamped_int_setting_store.dart';
 
 const minMaxParallelUploads = 1;
 const maxMaxParallelUploads = 5;
 const defaultMaxParallelUploads = 3;
 
-int clampMaxParallelUploads(Object? input) {
-  if (input is! num || !input.isFinite) return defaultMaxParallelUploads;
-  return input.round().clamp(minMaxParallelUploads, maxMaxParallelUploads);
-}
+int clampMaxParallelUploads(Object? input) => ClampedIntSettingStore.clampValue(
+      input,
+      min: minMaxParallelUploads,
+      max: maxMaxParallelUploads,
+      fallback: defaultMaxParallelUploads,
+    );
 
 /// Persists upload settings in `<documents>/upload-settings.json`.
 class UploadSettingsStore {
-  UploadSettingsStore(this.documentsPath);
+  UploadSettingsStore(String documentsPath)
+      : _store = ClampedIntSettingStore(
+          documentsPath: documentsPath,
+          fileName: 'upload-settings.json',
+          jsonKey: 'maxParallelUploads',
+          min: minMaxParallelUploads,
+          max: maxMaxParallelUploads,
+          defaultValue: defaultMaxParallelUploads,
+        );
 
-  final String documentsPath;
+  final ClampedIntSettingStore _store;
 
-  int? _cache;
-  Future<void> _mutationQueue = Future.value();
+  Future<int> getMaxParallelUploads() => _store.read();
 
-  String get _filePath => p.join(documentsPath, 'upload-settings.json');
-
-  Future<int> getMaxParallelUploads() async {
-    final cached = _cache;
-    if (cached != null) return cached;
-
-    final file = File(_filePath);
-    if (!await file.exists()) {
-      return _cache = defaultMaxParallelUploads;
-    }
-    try {
-      final parsed = jsonDecode(await file.readAsString());
-      final value =
-          parsed is Map<String, Object?> ? parsed['maxParallelUploads'] : null;
-      return _cache = clampMaxParallelUploads(value);
-    } catch (_) {
-      return _cache = defaultMaxParallelUploads;
-    }
-  }
-
-  Future<int> saveMaxParallelUploads(int value) async {
-    final clamped = clampMaxParallelUploads(value);
-    final next = _mutationQueue.catchError((_) {}).then((_) async {
-      _cache = clamped;
-      await File(_filePath)
-          .writeAsString(jsonEncode({'maxParallelUploads': clamped}));
-    });
-    _mutationQueue = next;
-    await next;
-    return clamped;
-  }
+  Future<int> saveMaxParallelUploads(int value) => _store.write(value);
 }

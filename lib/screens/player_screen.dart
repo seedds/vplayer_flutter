@@ -374,23 +374,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _showControls();
   }
 
-  void _handleTogglePlayback() {
+  void _handleTogglePlayback({bool showControls = true}) {
     if (_isPlaying) {
       _player.pause();
     } else {
       _playbackInterrupted = false;
       _player.play();
     }
-    _showControls();
-  }
-
-  void _handleTogglePlaybackWithoutControls() {
-    if (_isPlaying) {
-      _player.pause();
-    } else {
-      _playbackInterrupted = false;
-      _player.play();
-    }
+    if (showControls) _showControls();
   }
 
   void _updatePlaybackRate(double nextRate) {
@@ -432,7 +423,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _toggleControlsLockFromGesture();
         return;
       }
-      _handleTogglePlaybackWithoutControls();
+      _handleTogglePlayback(showControls: false);
       return;
     }
 

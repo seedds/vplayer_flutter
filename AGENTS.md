@@ -30,6 +30,7 @@ lib/
   services/              (pure Dart, no Flutter deps except thumbnail/media_kit)
     video_library.dart   filesystem: list/sanitize/sort/create/rename/move/delete
     playback_state_store.dart   playback-state.json, serialized write queue
+    clamped_int_setting_store.dart  generic clamped-int JSON store (cache + queue)
     upload_settings_store.dart  upload-settings.json (maxParallelUploads 1-5)
     subtitle_settings_store.dart subtitle-settings.json (subtitleFontSize 24-48)
     subtitle_service.dart       SRT parse + active-cue lookup
@@ -46,7 +47,8 @@ lib/
     player_screen.dart   fullscreen player: controls, gestures, scrub, subtitles
   widgets/
     video_card.dart      row: thumbnail, badges, swipe-to-delete
-test/                    54 tests: library, subtitles, playback store,
+    setting_picker_screen.dart  shared iOS-style int-options drill-down picker
+test/                    59 tests: library, subtitles, playback store,
                          subtitle settings, server, tablet layout
 ```
 
@@ -99,10 +101,10 @@ speaks exactly this; keep them in lockstep.
 |---|---|---|
 | GET | `/` | HTML upload page |
 | GET | `/health` | `{ok, port, activeUploads}` — used for adopt probe |
-| POST | `/upload/init` | `{fileName, relativePath?, totalSize, mimeType?}` → `{uploadId, fileName, relativePath, chunkSize}` |
-| POST | `/upload/chunk` | multipart `file` field + headers `x-upload-id/x-chunk-index/x-total-chunks/x-total-size` → `{ok, receivedBytes, totalBytes}` |
+| POST | `/upload/init` | `{fileName, relativePath?, totalSize, mimeType?}` → `{uploadId, fileName, relativePath, chunkSize}`. `fileName` may be omitted when `relativePath` is given. |
+| POST | `/upload/chunk` | multipart `file` field + headers `x-upload-id/x-chunk-index/x-total-chunks/x-total-size` → `{ok, receivedBytes, totalBytes}`. Non-multipart bodies fall back to the raw request body. |
 | POST | `/upload/complete` | `{uploadId}` → moves temp→final, refreshes library |
-| POST | `/upload/cancel` | `{uploadId}` — idempotent |
+| POST | `/upload/cancel` | `{uploadId}` — idempotent; emits a `cancelled` activity status |
 | GET | `/library/list?path=` | `{path, items[]}` |
 | POST | `/library/folder` | `{parentPath?, name}` |
 | POST | `/library/delete` | `{relativePath, entryType, currentPath?}` |
@@ -111,14 +113,18 @@ speaks exactly this; keep them in lockstep.
 
 Chunk rules: 1 MiB (`chunkSize`), **strictly sequential per file**, cumulative
 bytes ≤ declared size, temp file per session in `uploads-tmp/`, moved to final
-on complete (overwrites existing file of same name).
+on complete (overwrites existing file of same name). The server enforces these
+too: each chunk must be ≤ `chunkSize`, and `x-total-chunks` is pinned to the
+session on the first chunk (a later chunk that changes it is rejected). Sessions
+live in memory only — `uploads-tmp/` is wiped on server start, so an in-progress
+upload does not survive a restart (retryable per chunk, not resumable).
 
 ### Two hard-won server gotchas (both fixed, keep them)
 
 1. **Always fully drain the multipart `parts` stream.** `break`-ing after the
    first part leaves the request body undrained, and `dart:io` then closes the
    socket without a response → browser shows "Failed to fetch" for any body
-   >~768 KB (i.e. every real 1 MiB chunk). Code keeps the first part's bytes
+   >~768 KB (i.e. every real 1 MiB chunk). Code keeps the `file` part's bytes
    but iterates to the end. See `_handleChunk` + regression test
    "handles full-size 1 MiB chunks".
 2. **Chunk handling is idempotent.** Browsers transparently retry a POST when a
@@ -141,8 +147,11 @@ Matched from the original RN implementation:
   double-tap window.
 - Scrub preview: single-flight, latest-wins queue, 0.05 s dedupe, via
   `player.screenshot()` after seek.
-- Lifecycle: on background/blur → pause + save + unlock + show controls; on
-  resume stay paused.
+- Playback-rate control (0.5×–2.0×, ±0.1 steps) exposed in the controls.
+- Lifecycle: on any non-resumed `AppLifecycleState` (inactive/paused/hidden) →
+  pause + save + unlock + show controls; on resume stay paused. `inactive`
+  counts (e.g. a Control Center pull pauses playback), not just full
+  background.
 - Auto-advance to next video in the current folder on completion.
 
 ## Tablet / orientation logic
@@ -170,7 +179,7 @@ Matched from the original RN implementation:
 
 ```bash
 dart analyze          # must be clean
-flutter test          # 54 tests
+flutter test          # 59 tests
 ```
 
 `test/upload_server_test.dart` spins up the real shelf server on an ephemeral

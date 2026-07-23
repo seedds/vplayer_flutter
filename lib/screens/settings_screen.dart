@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
 import '../theme.dart';
+import '../widgets/setting_picker_screen.dart';
 
 /// Rounded card behind each inset-grouped section, themed to the app palette.
 final _sectionDecoration = BoxDecoration(
@@ -118,78 +119,18 @@ class SettingsScreen extends ConsumerWidget {
 class ConcurrencyPickerScreen extends ConsumerWidget {
   const ConcurrencyPickerScreen({super.key});
 
-  Future<void> _showError(BuildContext context, String message) {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _select(BuildContext context, WidgetRef ref, int value) async {
-    final didSave =
-        await ref.read(uploadSettingsProvider.notifier).select(value);
-    if (!context.mounted) return;
-    if (didSave) {
-      Navigator.of(context).pop();
-    } else {
-      await _showError(context, 'Could not save upload settings.');
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final maxParallelUploads = ref.watch(uploadSettingsProvider);
-
-    return CupertinoPageScaffold(
-      backgroundColor: VColors.background,
-      navigationBar: const CupertinoNavigationBar(
-        backgroundColor: VColors.background,
-        previousPageTitle: 'Settings',
-        middle: Text('Concurrent uploads'),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          CupertinoListSection.insetGrouped(
-            backgroundColor: VColors.background,
-            decoration: _sectionDecoration,
-            dividerMargin: 20,
-            additionalDividerMargin: 0,
-            footer: const Text(
-              'Choose how many files the browser uploader can send in parallel.',
-              style: _footerStyle,
-            ),
-            children: [
-              for (final value in uploadConcurrencyOptions)
-                CupertinoListTile(
-                  backgroundColor: VColors.cardBackground,
-                  backgroundColorActivated: VColors.cardPressed,
-                  title: Text(
-                    '$value',
-                    style: const TextStyle(color: VColors.ink, fontSize: 16),
-                  ),
-                  trailing: value == maxParallelUploads
-                      ? const Icon(
-                          CupertinoIcons.check_mark,
-                          size: 22,
-                          color: VColors.accent,
-                        )
-                      : null,
-                  onTap: () => _select(context, ref, value),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return SettingPickerScreen(
+      title: 'Concurrent uploads',
+      footer:
+          'Choose how many files the browser uploader can send in parallel.',
+      options: uploadConcurrencyOptions,
+      selectedValue: ref.watch(uploadSettingsProvider),
+      labelFor: (value) => '$value',
+      onSelect: (value) =>
+          ref.read(uploadSettingsProvider.notifier).select(value),
+      errorMessage: 'Could not save upload settings.',
     );
   }
 }
@@ -199,78 +140,17 @@ class ConcurrencyPickerScreen extends ConsumerWidget {
 class SubtitleFontSizePickerScreen extends ConsumerWidget {
   const SubtitleFontSizePickerScreen({super.key});
 
-  Future<void> _showError(BuildContext context, String message) {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _select(BuildContext context, WidgetRef ref, int value) async {
-    final didSave =
-        await ref.read(subtitleFontSizeProvider.notifier).select(value);
-    if (!context.mounted) return;
-    if (didSave) {
-      Navigator.of(context).pop();
-    } else {
-      await _showError(context, 'Could not save subtitle settings.');
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subtitleFontSize = ref.watch(subtitleFontSizeProvider);
-
-    return CupertinoPageScaffold(
-      backgroundColor: VColors.background,
-      navigationBar: const CupertinoNavigationBar(
-        backgroundColor: VColors.background,
-        previousPageTitle: 'Settings',
-        middle: Text('Subtitle size'),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          CupertinoListSection.insetGrouped(
-            backgroundColor: VColors.background,
-            decoration: _sectionDecoration,
-            dividerMargin: 20,
-            additionalDividerMargin: 0,
-            footer: const Text(
-              'Choose the on-screen text size for video subtitles.',
-              style: _footerStyle,
-            ),
-            children: [
-              for (final value in subtitleFontSizeOptions)
-                CupertinoListTile(
-                  backgroundColor: VColors.cardBackground,
-                  backgroundColorActivated: VColors.cardPressed,
-                  title: Text(
-                    '$value pt',
-                    style: const TextStyle(color: VColors.ink, fontSize: 16),
-                  ),
-                  trailing: value == subtitleFontSize
-                      ? const Icon(
-                          CupertinoIcons.check_mark,
-                          size: 22,
-                          color: VColors.accent,
-                        )
-                      : null,
-                  onTap: () => _select(context, ref, value),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return SettingPickerScreen(
+      title: 'Subtitle size',
+      footer: 'Choose the on-screen text size for video subtitles.',
+      options: subtitleFontSizeOptions,
+      selectedValue: ref.watch(subtitleFontSizeProvider),
+      labelFor: (value) => '$value pt',
+      onSelect: (value) =>
+          ref.read(subtitleFontSizeProvider.notifier).select(value),
+      errorMessage: 'Could not save subtitle settings.',
     );
   }
 }

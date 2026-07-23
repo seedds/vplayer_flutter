@@ -1,4 +1,4 @@
-enum UploadStatus { idle, receiving, complete, error, stopped }
+enum UploadStatus { idle, receiving, complete, cancelled, error, stopped }
 
 class ActiveUploadRow {
   const ActiveUploadRow({

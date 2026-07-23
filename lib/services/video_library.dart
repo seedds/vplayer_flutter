@@ -97,7 +97,9 @@ class VideoLibrary {
     return segments.isEmpty ? '' : segments.last;
   }
 
-  static String? _relativeParentPath(String relativePath) {
+  /// The parent directory of a `/`-separated relative path, or null when the
+  /// path is empty or already top-level.
+  static String? parentPathOf(String? relativePath) {
     final segments = _splitRelativePath(relativePath);
     if (segments.length <= 1) return null;
     return segments.sublist(0, segments.length - 1).join('/');
@@ -168,7 +170,7 @@ class VideoLibrary {
     if (type == FileSystemEntityType.notFound) return null;
 
     final name = _relativeName(relativePath);
-    final parentPath = _relativeParentPath(relativePath);
+    final parentPath = parentPathOf(relativePath);
 
     if (type == FileSystemEntityType.directory) {
       final stat = await Directory(path).stat();
@@ -238,6 +240,27 @@ class VideoLibrary {
     return videos;
   }
 
+  /// The videos whose playback artifacts (saved progress, thumbnail) belong to
+  /// [target]: the folder's videos (recursively) for a folder, the video
+  /// itself for a video, or none for anything else.
+  Future<List<LibraryItem>> playbackArtifactVideosFor(LibraryItem target) {
+    if (target.isFolder) return listAllVideoItems(target.relativePath);
+    return Future.value(target.isVideo ? [target] : []);
+  }
+
+  /// [playbackArtifactVideosFor] applied across many [targets], de-duplicated
+  /// by absolute path (overlapping folder selections resolve to one entry).
+  Future<List<LibraryItem>> collectPlaybackArtifactVideos(
+      Iterable<LibraryItem> targets) async {
+    final byPath = <String, LibraryItem>{};
+    for (final target in targets) {
+      for (final video in await playbackArtifactVideosFor(target)) {
+        byPath[video.path] = video;
+      }
+    }
+    return byPath.values.toList();
+  }
+
   Future<LibraryItem?> getLibraryItem(
       String relativePath, String entryType) async {
     final normalizedPath = entryType == 'folder'
@@ -258,7 +281,7 @@ class VideoLibrary {
   })> createUploadTarget(String relativePath) async {
     await ensureAppDirectories();
     final normalizedPath = normalizeLibraryFilePath(relativePath);
-    final parentPath = _relativeParentPath(normalizedPath);
+    final parentPath = parentPathOf(normalizedPath);
     final sanitizedName = _relativeName(normalizedPath);
 
     if (parentPath != null) {
@@ -266,7 +289,7 @@ class VideoLibrary {
     }
 
     final uploadKey =
-        '${DateTime.now().millisecondsSinceEpoch}-${_randomSuffix()}';
+        '${DateTime.now().millisecondsSinceEpoch}-${randomToken()}';
     return (
       fileName: sanitizedName,
       finalPath: itemPathFor(normalizedPath),
@@ -276,7 +299,9 @@ class VideoLibrary {
     );
   }
 
-  static String _randomSuffix() {
+  /// A short (6-char) lowercase alphanumeric token for making temp/session
+  /// identifiers unique. Not cryptographically random.
+  static String randomToken() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final seed = DateTime.now().microsecondsSinceEpoch;
     final buffer = StringBuffer();

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
@@ -92,12 +91,7 @@ class LibraryState {
       );
 }
 
-String? parentPathOf(String? path) {
-  if (path == null || path.isEmpty) return null;
-  final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-  if (segments.length <= 1) return null;
-  return segments.sublist(0, segments.length - 1).join('/');
-}
+String? parentPathOf(String? path) => VideoLibrary.parentPathOf(path);
 
 class LibraryController extends Notifier<LibraryState> {
   @override
@@ -202,6 +196,19 @@ class ServerState {
   String? get serverUrl => running && ipAddress != null && activePort != null
       ? 'http://$ipAddress:$activePort'
       : null;
+
+  ServerState copyWith({
+    bool? running,
+    int? Function()? activePort,
+    String? Function()? ipAddress,
+    UploadActivity? activity,
+  }) =>
+      ServerState(
+        running: running ?? this.running,
+        activePort: activePort != null ? activePort() : this.activePort,
+        ipAddress: ipAddress != null ? ipAddress() : this.ipAddress,
+        activity: activity ?? this.activity,
+      );
 }
 
 class ServerController extends Notifier<ServerState> {
@@ -219,12 +226,7 @@ class ServerController extends Notifier<ServerState> {
   LocalUploadServer get _server => ref.read(uploadServerProvider);
 
   void _setActivity(UploadActivity activity) {
-    state = ServerState(
-      running: state.running,
-      activePort: state.activePort,
-      ipAddress: state.ipAddress,
-      activity: activity,
-    );
+    state = state.copyWith(activity: activity);
   }
 
   Future<void> refreshNetwork() async {
@@ -232,12 +234,7 @@ class ServerController extends Notifier<ServerState> {
       String? address = await NetworkInfo().getWifiIP();
       if (address == '0.0.0.0') address = null;
       address ??= await _fallbackLocalIp();
-      state = ServerState(
-        running: state.running,
-        activePort: state.activePort,
-        ipAddress: address,
-        activity: state.activity,
-      );
+      state = state.copyWith(ipAddress: () => address);
     } catch (_) {}
     _syncIpPolling();
   }
@@ -302,10 +299,9 @@ class ServerController extends Notifier<ServerState> {
   }
 
   Future<void> _adopt(int port) async {
-    state = ServerState(
+    state = state.copyWith(
       running: true,
-      activePort: port,
-      ipAddress: state.ipAddress,
+      activePort: () => port,
       activity:
           UploadActivity.simple(UploadStatus.idle, 'Server ready on port $port.'),
     );
@@ -337,10 +333,9 @@ class ServerController extends Notifier<ServerState> {
         await _adopt(fallback.reportedPort ?? port);
         return;
       }
-      state = ServerState(
+      state = state.copyWith(
         running: false,
-        activePort: null,
-        ipAddress: state.ipAddress,
+        activePort: () => null,
         activity: UploadActivity.simple(
             UploadStatus.error,
             error is Exception
@@ -353,10 +348,9 @@ class ServerController extends Notifier<ServerState> {
 
   Future<void> stopServer() async {
     await _server.stop();
-    state = ServerState(
+    state = state.copyWith(
       running: false,
-      activePort: null,
-      ipAddress: state.ipAddress,
+      activePort: () => null,
       activity: UploadActivity.simple(UploadStatus.stopped, 'Server stopped.'),
     );
     _syncIpPolling();
@@ -556,7 +550,3 @@ class SelectedVideoPathController extends Notifier<String?> {
 final selectedVideoPathProvider =
     NotifierProvider<SelectedVideoPathController, String?>(
         SelectedVideoPathController.new);
-
-void debugLog(String message) {
-  if (kDebugMode) debugPrint('[vplayer] $message');
-}

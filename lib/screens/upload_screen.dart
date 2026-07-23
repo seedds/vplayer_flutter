@@ -174,7 +174,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                         ? '${formatBytes(activity.receivedBytes ?? 0)} / ${formatBytes(activity.totalBytes!)}'
                         : activity.status == UploadStatus.complete
                             ? 'Upload finished'
-                            : 'Waiting for browser upload',
+                            : activity.status == UploadStatus.cancelled
+                                ? 'Upload cancelled'
+                                : 'Waiting for browser upload',
                     style:
                         const TextStyle(color: VColors.muted, fontSize: 12),
                   ),
