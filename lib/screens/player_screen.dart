@@ -320,7 +320,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _handlePlayToEnd() {
     _persistPositionForce();
-    if (mounted) setState(() => _controlsVisible = false);
+    _clearScrubPreview();
+    if (mounted) {
+      setState(() {
+        _isScrubbing = false;
+        // End of playlist: reveal controls so the user isn't stranded on a
+        // frozen frame. With a next video, _selectIndex hides them for a
+        // clean start.
+        _controlsVisible = !_hasNextVideo;
+      });
+    }
     if (_hasNextVideo) {
       _selectIndex(_currentIndex + 1);
     }
@@ -337,7 +346,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _clearAutoHideTimer();
     if (_controlsVisible && _isPlaying && !_isScrubbing) {
       _autoHideTimer = Timer(_controlsAutoHideDelay, () {
-        if (mounted) setState(() => _controlsVisible = false);
+        if (mounted && !_isScrubbing) setState(() => _controlsVisible = false);
       });
     }
   }
