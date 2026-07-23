@@ -31,6 +31,7 @@ lib/
     video_library.dart   filesystem: list/sanitize/sort/create/rename/move/delete
     playback_state_store.dart   playback-state.json, serialized write queue
     upload_settings_store.dart  upload-settings.json (maxParallelUploads 1-5)
+    subtitle_settings_store.dart subtitle-settings.json (subtitleFontSize 24-48)
     subtitle_service.dart       SRT parse + active-cue lookup
     thumbnail_service.dart      headless media_kit player -> jpg cache
     upload_server.dart          shelf server + all endpoints + chunk sessions
@@ -41,12 +42,12 @@ lib/
   screens/
     library_screen.dart  list, empty state, selection mode, clear-playback
     upload_screen.dart   server status, port field, activity
-    settings_screen.dart concurrency picker
+    settings_screen.dart concurrency picker, subtitle-size picker
     player_screen.dart   fullscreen player: controls, gestures, scrub, subtitles
   widgets/
     video_card.dart      row: thumbnail, badges, swipe-to-delete
-test/                    47 tests: library, subtitles, playback store, server,
-                         tablet layout
+test/                    54 tests: library, subtitles, playback store,
+                         subtitle settings, server, tablet layout
 ```
 
 ## Riverpod providers (`lib/providers/app_providers.dart`)
@@ -54,8 +55,8 @@ test/                    47 tests: library, subtitles, playback store, server,
 - `documentsPathProvider` — **overridden in `main.dart`** with the real docs
   path. Everything downstream depends on it.
 - Service singletons: `videoLibraryProvider`, `playbackStateStoreProvider`,
-  `uploadSettingsStoreProvider`, `thumbnailServiceProvider`,
-  `uploadServerProvider`.
+  `uploadSettingsStoreProvider`, `subtitleSettingsStoreProvider`,
+  `thumbnailServiceProvider`, `uploadServerProvider`.
 - `libraryProvider` (`LibraryController` / `LibraryState`) — current folder
   items + playback map + loading + revision counter. `.refresh([path])` walks
   up if a folder vanished.
@@ -66,6 +67,7 @@ test/                    47 tests: library, subtitles, playback store, server,
 - `thumbnailProvider` (`ThumbnailController`) — path→jpg map; worker pool
   (concurrency 3, 3 attempts) hydrating on demand.
 - `uploadSettingsProvider` — maxParallelUploads (1–5, default 3).
+- `subtitleFontSizeProvider` — subtitle font size (24–48 pt, default 36).
 - `selectedVideoPathProvider` — which video the player screen opens.
 
 ## Storage layout (app documents dir)
@@ -77,6 +79,7 @@ thumbnails/            <djb2hash>.jpg cached library thumbnails
 playback-state.json    { "<abs video path>": {positionSeconds, durationSeconds?,
                           hasStartedPlayback?, updatedAt} }
 upload-settings.json   { "maxParallelUploads": 1..5 }
+subtitle-settings.json { "subtitleFontSize": 24..48 }
 ```
 
 - Allowed video ext: `.mp4 .mov .m4v .webm .mkv`; subtitles: `.srt`; anything
@@ -167,7 +170,7 @@ Matched from the original RN implementation:
 
 ```bash
 dart analyze          # must be clean
-flutter test          # 47 tests
+flutter test          # 54 tests
 ```
 
 `test/upload_server_test.dart` spins up the real shelf server on an ephemeral

@@ -9,6 +9,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import '../models/library_item.dart';
 import '../models/upload_activity.dart';
 import '../services/playback_state_store.dart';
+import '../services/subtitle_settings_store.dart';
 import '../services/thumbnail_service.dart';
 import '../services/upload_server.dart';
 import '../services/upload_settings_store.dart';
@@ -17,6 +18,7 @@ import '../services/video_library.dart';
 const thumbnailHydrationConcurrency = 3;
 const thumbnailHydrationMaxAttempts = 3;
 const uploadConcurrencyOptions = [1, 2, 3, 4, 5];
+const subtitleFontSizeOptions = [24, 28, 32, 36, 40, 44, 48];
 
 // ---- service singletons (documentsPath is provided at bootstrap) ----------
 
@@ -34,6 +36,10 @@ final playbackStateStoreProvider = Provider<PlaybackStateStore>(
 
 final uploadSettingsStoreProvider = Provider<UploadSettingsStore>(
   (ref) => UploadSettingsStore(ref.watch(documentsPathProvider)),
+);
+
+final subtitleSettingsStoreProvider = Provider<SubtitleSettingsStore>(
+  (ref) => SubtitleSettingsStore(ref.watch(documentsPathProvider)),
 );
 
 final thumbnailServiceProvider = Provider<ThumbnailService>(
@@ -387,6 +393,33 @@ class UploadSettingsController extends Notifier<int> {
 final uploadSettingsProvider =
     NotifierProvider<UploadSettingsController, int>(
         UploadSettingsController.new);
+
+// ---- subtitle settings ------------------------------------------------------
+
+class SubtitleSettingsController extends Notifier<int> {
+  @override
+  int build() => defaultSubtitleFontSize;
+
+  Future<void> load() async {
+    state =
+        await ref.read(subtitleSettingsStoreProvider).getSubtitleFontSize();
+  }
+
+  Future<bool> select(int value) async {
+    try {
+      state = await ref
+          .read(subtitleSettingsStoreProvider)
+          .saveSubtitleFontSize(value);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+final subtitleFontSizeProvider =
+    NotifierProvider<SubtitleSettingsController, int>(
+        SubtitleSettingsController.new);
 
 // ---- thumbnails --------------------------------------------------------------
 

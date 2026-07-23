@@ -79,6 +79,7 @@ class _RootShellState extends ConsumerState<RootShell>
     await SystemChrome.setPreferredOrientations(appOrientations(isTabletLayout));
 
     await ref.read(uploadSettingsProvider.notifier).load();
+    await ref.read(subtitleFontSizeProvider.notifier).load();
     await ref.read(videoLibraryProvider).ensureAppDirectories();
     await ref.read(libraryProvider.notifier).refresh();
     await ref.read(serverProvider.notifier).refreshNetwork();

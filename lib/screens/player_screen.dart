@@ -589,6 +589,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return const ColoredBox(color: Color(0xFF050505));
     }
 
+    final subtitleFontSize = ref.watch(subtitleFontSizeProvider).toDouble();
     final insets = MediaQuery.paddingOf(context);
     final displayedTime = _isScrubbing ? _scrubTime : _currentTime;
     final remainingTime =
@@ -647,7 +648,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: const Color(0xFFF2F2F2),
-                        fontSize: 36,
+                        fontSize: subtitleFontSize,
                         height: 44 / 36,
                         fontWeight: FontWeight.w800,
                         shadows: const [
