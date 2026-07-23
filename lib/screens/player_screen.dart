@@ -10,6 +10,7 @@ import '../app.dart';
 import '../models/library_item.dart';
 import '../providers/app_providers.dart';
 import '../services/format.dart';
+import '../services/playback_state_store.dart';
 import '../services/subtitle_service.dart';
 import '../theme.dart';
 
@@ -22,6 +23,10 @@ const _playbackRateStep = 0.1;
 const _minPlaybackRate = 0.5;
 const _maxPlaybackRate = 2.0;
 const _controlsAutoHideDelay = Duration(milliseconds: 2500);
+// Fixed width for the seek-bar elapsed/remaining labels. Sized for the widest
+// value ("-HH:MM:SS") at 12px/w700 with tabular figures, so the boxes never
+// resize while scrubbing and the centered title stays put. Tunable.
+const _seekTimeLabelWidth = 74.0;
 
 double _clampPlaybackRate(double rate) =>
     ((rate * 10).roundToDouble() / 10).clamp(_minPlaybackRate, _maxPlaybackRate);
@@ -49,6 +54,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _videoController;
+  late final PlaybackStateStore _playbackStore;
 
   List<LibraryItem> _videos = [];
   int _currentIndex = 0;
@@ -96,6 +102,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    _playbackStore = ref.read(playbackStateStoreProvider);
+
     final library = ref.read(libraryProvider);
     _videos = library.videoItems;
     final selectedPath = ref.read(selectedVideoPathProvider);
@@ -135,7 +143,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _duration = seconds;
       final video = _video;
       if (video != null) {
-        ref.read(playbackStateStoreProvider).saveDuration(video.path, seconds);
+        _playbackStore.saveDuration(video.path, seconds);
       }
       if (mounted) setState(() {});
     }));
@@ -206,9 +214,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     _lastPersistedPosition = positionSeconds;
-    ref
-        .read(playbackStateStoreProvider)
-        .savePosition(video.path, positionSeconds, _duration);
+    _playbackStore.savePosition(video.path, positionSeconds, _duration);
   }
 
   void _persistPositionForce() =>
@@ -232,8 +238,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _scrubTime = 0;
     });
 
-    final savedPosition =
-        await ref.read(playbackStateStoreProvider).getSavedPosition(video.path);
+    final savedPosition = await _playbackStore.getSavedPosition(video.path);
     if (_disposed) return;
 
     await _player.open(Media(video.path), play: false);
@@ -862,12 +867,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                           horizontal: 12),
                                       child: Row(
                                         children: [
-                                          Text(
-                                            formatDuration(displayedTime),
-                                            style: const TextStyle(
-                                              color: CupertinoColors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
+                                          SizedBox(
+                                            width: _seekTimeLabelWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                formatDuration(displayedTime),
+                                                style: const TextStyle(
+                                                  color: CupertinoColors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontFeatures: [
+                                                    FontFeature.tabularFigures()
+                                                  ],
+                                                ),
+                                              ),
                                             ),
                                           ),
                                           Expanded(
@@ -888,12 +902,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                               ),
                                             ),
                                           ),
-                                          Text(
-                                            '-${formatDuration(remainingTime.toDouble())}',
-                                            style: const TextStyle(
-                                              color: CupertinoColors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
+                                          SizedBox(
+                                            width: _seekTimeLabelWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerRight,
+                                              child: Text(
+                                                '-${formatDuration(remainingTime.toDouble())}',
+                                                style: const TextStyle(
+                                                  color: CupertinoColors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontFeatures: [
+                                                    FontFeature.tabularFigures()
+                                                  ],
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
