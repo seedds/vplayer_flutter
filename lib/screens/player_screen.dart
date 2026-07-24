@@ -434,6 +434,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _lastBackgroundTapTouchCount = 0;
       if (normalizedTouchCount == 1) {
         singleTapAction();
+        _restartAutoHideTimer();
       }
     });
   }
