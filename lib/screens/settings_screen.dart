@@ -12,14 +12,6 @@ final _sectionDecoration = BoxDecoration(
   border: Border.all(color: VColors.cardBorder),
 );
 
-const _headerStyle = TextStyle(
-  color: VColors.muted,
-  fontSize: 13,
-  fontWeight: FontWeight.w400,
-);
-
-const _footerStyle = TextStyle(color: VColors.muted, fontSize: 13);
-
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -62,11 +54,6 @@ class SettingsScreen extends ConsumerWidget {
         CupertinoListSection.insetGrouped(
           backgroundColor: VColors.background,
           decoration: _sectionDecoration,
-          header: const Text('Upload', style: _headerStyle),
-          footer: const Text(
-            'Refresh the browser upload page to apply changes.',
-            style: _footerStyle,
-          ),
           children: [
             CupertinoListTile(
               backgroundColor: VColors.cardBackground,
@@ -87,11 +74,6 @@ class SettingsScreen extends ConsumerWidget {
         CupertinoListSection.insetGrouped(
           backgroundColor: VColors.background,
           decoration: _sectionDecoration,
-          header: const Text('Subtitles', style: _headerStyle),
-          footer: const Text(
-            'Applies to subtitles shown while playing a video.',
-            style: _footerStyle,
-          ),
           children: [
             CupertinoListTile(
               backgroundColor: VColors.cardBackground,
